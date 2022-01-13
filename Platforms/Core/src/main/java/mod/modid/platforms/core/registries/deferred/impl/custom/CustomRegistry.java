@@ -1,0 +1,65 @@
+package mod.modid.platforms.core.registries.deferred.impl.custom;
+
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
+import mod.modid.platforms.core.registries.ICustomRegistry;
+import mod.modid.platforms.core.registries.ICustomRegistryEntry;
+import net.minecraft.resources.ResourceLocation;
+
+import java.util.Collection;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
+
+public class CustomRegistry<T extends ICustomRegistryEntry> implements ICustomRegistry<T>
+{
+    private final BiMap<ResourceLocation, T> registerMap = HashBiMap.create();
+
+    @Override
+    public Collection<T> getValues()
+    {
+        synchronized (registerMap) {
+            return registerMap.values();
+        }
+    }
+
+    @Override
+    public Set<ResourceLocation> getNames()
+    {
+        synchronized (registerMap) {
+            return registerMap.keySet();
+        }
+    }
+
+    @Override
+    public Optional<T> get(final ResourceLocation name)
+    {
+        synchronized (registerMap) {
+            return Optional.ofNullable(registerMap.get(name));
+        }
+    }
+
+    @Override
+    public void forEach(final Consumer<T> consumer)
+    {
+        synchronized (registerMap) {
+            registerMap.values().forEach(consumer);
+        }
+    }
+
+    public void register(final T value) {
+        synchronized (registerMap) {
+            registerMap.put(value.getRegistryName(), value);
+        }
+    }
+
+    public static final class Builder<E extends ICustomRegistryEntry> implements ICustomRegistry.Builder<E> {
+
+        @Override
+        public ICustomRegistry<E> build()
+        {
+            return new CustomRegistry<>();
+        }
+    }
+}
+

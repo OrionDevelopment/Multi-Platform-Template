@@ -1,0 +1,13 @@
+modLoader="javafml"
+loaderVersion="[28,)"
+license="GLGPLv3"
+
+[[mods]] #mandatory
+modId="modif"
+version="${version}"
+displayName="Some mod"
+authors="Some author "
+logoFile="logo.png"
+description='''
+Some description
+'''

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "Mod",
+  "version": "${version}",
+
+  "name": "Mod",
+  "description": "A mod.",
+  "authors": [
+    "Some one"
+  ],
+  "contact": {
+    "homepage": "https://homepage.com/",
+    "sources": "https://github.com/OrionDevelopment/Multi-Platform-Template"
+  },
+
+  "license": "LGPL-3.0",
+  "icon": "logo.png",
+
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "mod.modid.fabric.FabricMod"
+    ],
+    "client": [
+      "mod.modid.fabric.client.FabricClientMod"
+    ]
+  },
+  "mixins": [
+    "mod.mixins.json"
+  ],
+
+  "depends": {
+    "fabricloader": ">=0.12.0",
+    "fabric": "*",
+    "minecraft": "1.18.x",
+    "java": ">=17"
+  },
+  "suggests": {
+  },
+  "accessWidener" : "mod.accesswidener"
+}

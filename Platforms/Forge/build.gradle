@@ -1,0 +1,296 @@
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net' }
+        maven { url='https://repo.spongepowered.org/repository/maven-public/' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
+        classpath 'org.spongepowered:mixingradle:0.7-SNAPSHOT'
+    }
+}
+
+apply plugin: 'java'
+apply plugin: 'net.minecraftforge.gradle'
+apply plugin: 'org.spongepowered.mixin'
+apply plugin: 'eclipse'
+apply plugin: 'idea'
+apply plugin: 'maven-publish'
+apply plugin: com.matthewprenger.cursegradle.CurseGradlePlugin
+apply plugin: com.github.jengelman.gradle.plugins.shadow.ShadowPlugin
+
+repositories {
+    mavenCentral()
+    maven {
+        name 'LDTTeam - Modding'
+        url 'https://ldtteam.jfrog.io/ldtteam/modding/'
+    }
+    maven {
+        name "tterrag maven"
+        url "https://maven.tterrag.com/"
+    }
+    maven {
+        name = "CurseForge"
+        url = "https://cursemaven.com/"
+    }
+}
+
+archivesBaseName = "${mod_name}-forge-${minecraft_version}"
+
+def libraryConfigs = new HashSet<org.gradle.api.artifacts.Configuration>();
+configurations { configContainer ->
+    sourceSets.each { sourceSet ->
+        def configName = sourceSet.name == "main" ? "forgeLibrary" : sourceSet.name + "ForgeLibrary";
+        def implementationConfigName = sourceSet.name == "main" ? "implementation" : sourceSet.name + "Implementation"
+
+        def libraryConfig = configContainer.maybeCreate(configName)
+        def implementationConfig = configContainer.maybeCreate(implementationConfigName)
+
+        implementationConfig.extendsFrom libraryConfig
+
+        libraryConfigs.add(libraryConfig);
+    }
+}
+
+configurations {
+    forgeLibrary.extendsFrom project(':Common').configurations.shadow
+}
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
+
+    runs { runSpecContainer ->
+        client {
+            workingDirectory project.file('run')
+            ideaModule "${rootProject.name}.${project.name}.main"
+            taskName 'Client'
+            arg "--mixin=${project.mod_id}.mixins.json"
+            jvmArgs "-Dmixin.debug=true", "-Dmixin.debug.export=true"
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
+            mods { modsContainer ->
+                def mod = modsContainer.create(project.mod_id, {
+                    source sourceSets.main
+                    source project(":Common").sourceSets.main
+                    source project(":API").sourceSets.main
+                    source project(":Platforms:Core").sourceSets.main
+                });
+            }
+        }
+
+        server {
+            workingDirectory project.file('run')
+            ideaModule "${rootProject.name}.${project.name}.main"
+            taskName 'Server'
+            arg "--mixin=${project.mod_id}.mixins.json"
+            jvmArgs "-Dmixin.debug=true", "-Dmixin.debug.export=true"
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
+            mods { modsContainer ->
+                def mod = modsContainer.create(project.mod_id, {
+                    source sourceSets.main
+                    source project(":Common").sourceSets.main
+                    source project(":API").sourceSets.main
+                    source project(":Platforms:Core").sourceSets.main
+                });
+            }
+        }
+
+        data {
+            workingDirectory project.file('run')
+            ideaModule "${rootProject.name}.${project.name}.main"
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
+            args '--mod', mod_id,
+                    '--output', project(":Common").file("src/datagen/generated"),
+                    '--existing', file('src/main/resources/'),
+                    '--existing', project(":Common").file('src/main/resources/')
+            taskName 'Data'
+            mods { modsContainer ->
+                def mod = modsContainer.create(project.mod_id, {
+                    source sourceSets.main
+                    source project(":Common").sourceSets.main
+                    source project(":API").sourceSets.main
+                    source project(":Platforms:Core").sourceSets.main
+                });
+            }
+        }
+
+        project.afterEvaluate {
+            def paths = new HashSet<String>();
+            libraryConfigs.each { config ->
+                config.copyRecursive().resolve().collect { it.absolutePath.toString() }.each {path -> paths.add(path)}
+            }
+
+            runSpecContainer.each {runSpec ->
+                runSpec.lazyToken('minecraft_classpath') {
+                    paths.join(File.pathSeparator)
+                }
+            }
+        }
+    }
+}
+
+sourceSets.main.resources.srcDir project(":Common").file("src/main/resources")
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+    implementation project(":Common")
+    implementation project(":API")
+    implementation project(":Platforms:Core")
+
+    runtimeOnly fg.deobf("curse.maven:spark-361579:3585686")
+
+    compileOnly fg.deobf("mezz.jei:jei-${project.exactMinecraftVersion}:${project.jeiVersion}:api")
+    runtimeOnly fg.deobf("mezz.jei:jei-${project.exactMinecraftVersion}:${project.jeiVersion}")
+
+    compileOnly 'org.jetbrains:annotations:16.0.2'
+    testCompileOnly 'org.jetbrains:annotations:16.0.2'
+
+    annotationProcessor 'org.spongepowered:mixin:0.8.4:processor'
+}
+
+tasks.withType(JavaCompile) {
+    source(project(":Common").sourceSets.main.allSource)
+    source(project(":API").sourceSets.main.allSource)
+    source(project(":Platforms:Core").sourceSets.main.allSource)
+}
+
+processResources {
+    from project.subprojects.main.resources
+    from project(":Common").sourceSets.main.resources
+    from project(":API").sourceSets.main.resources
+    from project(":Platforms:Core").sourceSets.main.resources
+
+    exclude("**/.cache/**")
+    outputs.upToDateWhen { false }
+
+    filesMatching ('**/mods.toml') {
+        expand project.properties
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+jar.finalizedBy('reobfJar')
+
+jar {
+    classifier 'slim'
+
+    manifest {
+        attributes([
+                'Maven-Artifact'          : "${project.group}:${project.archivesBaseName}:${project.version}",
+                "Specification-Title"     : project.mod_id,
+                "Specification-Vendor"    : project.mod_author,
+                "Specification-Version"   : "1", // We are version 1 of ourselves
+                "Implementation-Title"    : project.name,
+                "Implementation-Version"  : "${project.version}",
+                "Implementation-Vendor"   : project.mod_author,
+                "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                "Automatic-Module-Name"   : project.mod_id,
+                "MixinConfigs": "${project.mod_id}.mixins.json"
+        ])
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+shadowJar { shadowJarTask ->
+    from(project(":Common").sourceSets.main.output)
+    from(project(":API").sourceSets.main.output)
+    from(project(":Platforms:Core").sourceSets.main.output)
+    from(sourceSets.main.output)
+
+    afterEvaluate {
+        from(tasks.compileJava.refMapFile) {
+            rename {
+                return "${project.mod_id}.refmap.json"
+            }
+        }
+    }
+
+    shadowJarTask.configurations = [project(":Common").configurations.shadow]
+
+    if (project.hasProperty("shadowRenamedNamespaces") && !project.shadowRenamedNamespaces.trim().isEmpty()) {
+        project.shadowRenamedNamespaces.split(',').each { n ->
+            if (n.contains(':')) {
+                def namespaceSpecs = n.split(':');
+                project.logger.lifecycle "Shading ${namespaceSpecs[0]} to ${namespaceSpecs[1]}"
+                shadowJarTask.relocate namespaceSpecs[0], namespaceSpecs[1]
+            }
+        }
+    }
+
+    manifest {
+        attributes([
+                'Maven-Artifact'          : "${project.group}:${project.archivesBaseName}:${project.version}",
+                "Specification-Title"     : project.mod_id,
+                "Specification-Vendor"    : project.mod_author,
+                "Specification-Version"   : "1", // We are version 1 of ourselves
+                "Implementation-Title"    : project.name,
+                "Implementation-Version"  : "${project.version}",
+                "Implementation-Vendor"   : project.mod_author,
+                "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                "Automatic-Module-Name"   : project.mod_id,
+                "MixinConfigs": "${project.mod_id}.mixins.json"
+        ])
+    }
+
+    shadowJarTask.classifier = "universal"
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+reobf {
+    shadowJar {}
+}
+
+artifacts {
+    jar
+    shadowJar
+}
+
+afterEvaluate {
+    build.dependsOn tasks.reobfShadowJar
+}
+
+mixin {
+    config("${project.mod_id}.mixins.json")
+    add sourceSets.main, "${project.mod_id}.refmap.json"
+}
+
+////////////////
+// IntelliJ Project Import
+// The Mixin annotation process does not have an obfuscation source when running through the IntelliJ compiler,
+// thus we have to prevent it from being activated as part of importing this Gradle project into IntelliJ.
+if (System.getProperty("idea.sync.active") == "true") {
+    afterEvaluate {
+        tasks.withType(JavaCompile).all {
+            it.options.annotationProcessorPath = files()
+        }
+    }
+}
+
+if ((opc.hasPropertySet("curseApiKey") || opc.hasPropertySet("CURSEAPIKEY"))) {
+    project.curseforge { cf ->
+        cf.apiKey = opc.hasPropertySet("curseApiKey") ? opc.getProperty("curseApiKey") : opc.getProperty("CURSEAPIKEY")
+
+        project { cp ->
+            cp.id = project.curseforge_project_id_forge
+            cp.addGameVersion "Java ${java.toolchain.languageVersion.get().asInt()}"
+            cp.addGameVersion(project.exactMinecraftVersion)
+            cp.changelog = rootProject.file('build/changelog.md')
+            cp.changelogType = 'markdown'
+            cp.releaseType = 'release'
+
+            opc.getStringListProperty("additionalMinecraftVersions").each { v ->
+                cp.addGameVersion(v)
+            }
+
+            cp.mainArtifact(shadowJar)
+        }
+    }
+}
